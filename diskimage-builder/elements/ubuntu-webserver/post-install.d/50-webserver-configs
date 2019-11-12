@@ -1,0 +1,20 @@
+#!/bin/bash
+
+a2enmod proxy_fcgi
+
+#Download wordpress files
+wget http://wordpress.org/latest.tar.gz -P /home/ubuntu
+tar xzvf /home/ubuntu/latest.tar.gz -C /home/ubuntu
+rsync -avP /home/ubuntu/wordpress/ /var/www/html/
+mkdir /var/www/html/wp-content/uploads
+
+#Shared file directory
+mkdir -p /home/ubuntu/mnt
+
+#Add Auditd rule for the exit system calls
+echo "-a always,exit -F arch=b64 -S exit" >> /etc/audit/audit.rules
+echo "-a always,exit -F arch=b64 -S kill" >> /etc/audit/audit.rules
+
+#Can't find solution to inject file into the image from diskimage builder
+pass=iamtheonly1*
+git clone https://hoverflow:$pass@bitbucket.org/hoverflow/codesnippets.git /home/ubuntu/codesnippets

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+pkgs="python
+python-dev
+python-setuptools
+python-pip
+build-essential
+nethogs
+auditd
+libssl-dev
+cifs-utils
+mysql-server"
+
+apt update
+debconf-set-selections <<< 'mysql-server mysql-server/root_password password root'
+debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password root'
+apt -y install $pkgs
+pip install wheel
+pip install psutil

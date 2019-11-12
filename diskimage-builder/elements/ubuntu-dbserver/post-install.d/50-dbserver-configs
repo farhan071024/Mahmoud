@@ -1,0 +1,16 @@
+#!/bin/bash
+
+sed -i 's/127.0.0.1/0.0.0.0/g' /etc/mysql/mysql.conf.d/mysqld.cnf
+
+#Add Auditd rule for the exit system calls
+echo "-a always,exit -F arch=b64 -S exit" >> /etc/audit/audit.rules
+echo "-a always,exit -F arch=b64 -S kill" >> /etc/audit/audit.rules
+
+#Shared file directory
+mkdir -p /home/ubuntu/mnt
+
+#Upload wordpress db schema to filebin
+#Can't find solution to inject file into the image from diskimage builder
+#wget https://filebin.ca/3xOOoW8cjMf1/wp_db.sql -P /home/ubuntu
+pass=
+git clone https://hoverflow:$pass@bitbucket.org/hoverflow/codesnippets.git /home/ubuntu/codesnippets

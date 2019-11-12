@@ -1,0 +1,24 @@
+#!/bin/bash
+
+: ${1?"Usage: $0 [webserver, appserver, dbserver]"}
+if [ "$1" == "webserver" ]; then
+    EXTRA_ELEMENTS=" ubuntu-webserver";
+    IMAGE_NAME="webserver-img";
+elif [ "$1" == "appserver" ]; then
+    EXTRA_ELEMENTS=" ubuntu-appserver";
+    IMAGE_NAME="appserver-img";
+elif [ "$1" == "dbserver" ]; then
+    EXTRA_ELEMENTS=" ubuntu-dbserver";
+    IMAGE_NAME="dbserver-img";
+fi
+
+export DIB_CLOUD_INIT_DATASOURCES="ConfigDrive, Ec2, OpenStack"
+
+export BASE_ELEMENTS="ubuntu cloud-init-datasources"$EXTRA_ELEMENTS
+export ELEMENTS_PATH="./elements/"
+
+export DIB_RELEASE="xenial"
+export ARCH="amd64"
+export IMAGE_PATH="./images/"$IMAGE_NAME
+
+disk-image-create vm $BASE_ELEMENTS -t qcow2 -o $IMAGE_PATH.qcow2

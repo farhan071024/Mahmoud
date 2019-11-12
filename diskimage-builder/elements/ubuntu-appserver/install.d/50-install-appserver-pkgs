@@ -1,0 +1,20 @@
+#!/bin/bash
+
+pkgs="python
+python-dev
+python-setuptools
+python-pip
+build-essential
+nethogs
+auditd
+libssl-dev
+cifs-utils
+mysql-client
+php
+php-mysql
+php7.0-xml"
+
+apt update
+apt -y install $pkgs
+pip install wheel
+pip install psutil

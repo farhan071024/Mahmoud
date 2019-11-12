@@ -1,0 +1,17 @@
+#!/bin/bash
+
+pkgs="python
+python-dev
+python-setuptools
+python-pip
+build-essential
+nethogs
+auditd
+libssl-dev
+cifs-utils
+apache2"
+
+apt update
+apt -y install $pkgs
+pip install wheel
+pip install psutil

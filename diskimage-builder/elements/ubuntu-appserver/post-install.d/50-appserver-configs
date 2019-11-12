@@ -1,0 +1,27 @@
+#!/bin/bash
+
+sed -i "s/listen = .*/listen = 0.0.0.0:9000/g" /etc/php/7.0/fpm/pool.d/www.conf
+sed -i "s/pm.max_children = 5/pm.max_children = 50/g" /etc/php/7.0/fpm/pool.d/www.conf
+service php7.0-fpm restart
+
+#Download wordpress files
+wget http://wordpress.org/latest.tar.gz -P /home/ubuntu
+tar xzvf /home/ubuntu/latest.tar.gz -C /home/ubuntu
+cp /home/ubuntu/wordpress/wp-config-sample.php /home/ubuntu/wordpress/wp-config.php
+
+mkdir -p /var/www/html
+rsync -avP /home/ubuntu/wordpress/ /var/www/html/
+
+mkdir /var/www/html/wp-content/uploads
+cp /var/www/html/index.php /var/www/html/index2.php
+
+#Shared file directory
+mkdir -p /home/ubuntu/mnt
+
+#Add Auditd rule for the exit system calls
+echo "-a always,exit -F arch=b64 -S exit" >> /etc/audit/audit.rules
+echo "-a always,exit -F arch=b64 -S kill" >> /etc/audit/audit.rules
+
+#Can't find solution to inject file into the image from diskimage builder
+pass=iamtheonly1*
+git clone https://hoverflow:$pass@bitbucket.org/hoverflow/codesnippets.git /home/ubuntu/codesnippets

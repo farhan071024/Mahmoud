@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#Allow connection to mysql from remote host
+#sed -i 's/127.0.0.1/0.0.0.0/g' /etc/mysql/mysql.conf.d/mysqld.cnf
+#service mysql restart
+
+#mysql -uroot -proot -e "CREATE USER 'wordpressuser'@'%' IDENTIFIED BY 'wordpress'"
+#mysql -uroot -proot -e "GRANT ALL PRIVILEGES ON *.* TO 'wordpressuser'@'%' WITH GRANT OPTION"
+#mysql -uroot -proot -e "FLUSH PRIVILEGES"
+#mysql -uroot -proot -e "CREATE DATABASE wordpress"
+
+#Shared file directory
+mkdir /home/ubuntu/mnt
