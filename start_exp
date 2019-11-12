@@ -1,0 +1,146 @@
+#!/bin/bash
+
+trap ctrl_c INT
+
+base=/home/ics/research
+private_key=$base/sshkey.pem
+malware_dir=$base/malware
+
+#Time in minutes
+normal_phase=30
+malicious_phase=30
+
+#storage_vm_ip=129.115.160.18
+traffic_gen_vm_ip=129.115.160.17
+floatingip=129.115.160.12
+floatingip_id="cf12b057-0777-4e9b-ad57-1a93b2b1505e"
+
+#Count number of files
+num_files=$(ls -p $base/malware | grep -v / | wc -l)
+n=1
+
+function clean(){
+    #Delete from known hosts
+    ssh-keygen -f "/home/ics/.ssh/known_hosts" -R $floatingip
+    openstack stack delete threetier --yes
+    #ssh -i $private_key -oStrictHostKeyChecking=no ubuntu@$storage_vm_ip "sudo rm /srv/samba/share/*"
+    ssh -i $private_key -oStrictHostKeyChecking=no ubuntu@$traffic_gen_vm_ip "killall python"
+    sleep 1m
+}
+
+function ctrl_c(){
+    echo "Cleaning before EXITING..."
+    clean
+    exit
+}
+
+function copy_data(){
+    server_tier=$1
+    dir=$2
+    echo "Copying data for "$server_tier" tier..."
+    servers_num=($(openstack server list | grep $server_tier | wc -l))
+    arr=($(openstack server list | grep $server_tier))
+    x=1
+    y=7
+    for i in `seq 1 $servers_num`;
+    do
+	server=${arr[$x]}
+	ip=${arr[$y]#*=}
+	arr2=($(neutron port-list | grep $ip))
+	port=${arr2[1]}
+
+	x=$((y+7))
+	y=$((x+6))
+
+	neutron floatingip-associate $floatingip_id $port
+	sleep 30s
+
+	echo "Copying auditd.log file from server: "$server" IP: "$ip" Port: "$port" ["$i"/"$servers_num"]"
+	ssh -i $private_key -oStrictHostKeyChecking=no ubuntu@$floatingip\
+	    "sudo cp /var/log/audit/audit.log /home/ubuntu/audit.log; sudo chown ubuntu:\ubuntu /home/ubuntu/audit.log"
+	scp -i $private_key -oStrictHostKeyChecking=no ubuntu@$floatingip:~/audit.log $base/data/$dir/$server_tier"-"$server"_audit.log"	
+	echo "Copying collecting agent file from server: "$server" IP: "$ip" Port: "$port" ["$i"/"$servers_num"]"
+	scp -i $private_key -oStrictHostKeyChecking=no ubuntu@$floatingip:~/mnt/* $base/data/$dir/
+	ssh-keygen -f "/home/ics/.ssh/known_hosts" -R $floatingip
+	neutron floatingip-disassociate $floatingip_id
+    done
+}
+
+
+for malware in $malware_dir/*
+do
+    if ! [ -f "$malware" ];then
+       continue
+    fi
+
+    malware=$(basename $malware)
+    echo "Experimenting with malware: "$malware"..........................["$n"/"$num_files"]"
+    ((n++))
+
+    #Start the stack (3-tier web architecture)
+    echo "Running the 3-tier stack..."
+    cd $base/codesnippets/expr_temps/HOT/
+    openstack stack create -e env.yaml -f yaml -t threetier.yaml threetier
+
+    sleep 4m
+
+    #Start traffic generator
+    echo "Starting traffic generation ..."
+    sleep 3s
+    ssh -n -i $base/sshkey.pem -oStrictHostKeyChecking=no ubuntu@$traffic_gen_vm_ip "cd http-traffic-gen; python trafficgen.py"  > /dev/null 2>&1 &
+    start_ts="$(date +"%Y-%m-%dT%H:%M:%S")"
+
+    echo "Normal phase ("$normal_phase")"
+    sleep $normal_phase'm'
+
+    echo "Malicious phase ("$malicious_phase")"
+    rand=$((RANDOM % 20))
+    echo "Injecting and running malware in random server after "$rand" mins..."
+    sleep $rand'm'
+
+    #Choosing random server and associating it floating ip `129.115.191.234`
+    arr=($(openstack server list | grep appserver))
+    server=${arr[1]}
+    ip=${arr[7]#*=}
+    arr=($(neutron port-list | grep $ip))
+    port=${arr[1]}
+
+    echo "Server: "$server" IP: "$ip
+
+    neutron floatingip-associate $floatingip_id $port
+    sleep 30s
+
+    #Injecting and running malware
+    scp -i $private_key -oStrictHostKeyChecking=no $malware_dir/$malware ubuntu@$floatingip:~/
+    ssh -i $private_key -oStrictHostKeyChecking=no ubuntu@$floatingip "chmod +x ~/$malware; sudo ~/$malware"
+    
+    neutron floatingip-disassociate $floatingip_id
+
+    mid_ts="$(date +"%Y-%m-%dT%H:%M:%S")"
+    sleep $((malicious_phase-rand))'m'
+    end_ts="$(date +"%Y-%m-%dT%H:%M:%S")"
+
+    echo "Copying data to local disk..."
+    mkdir $base/data/$malware
+    #Copy data
+    copy_data "appserver" $malware
+    copy_data "webserver" $malware
+    copy_data "dbserver" $malware
+
+    echo "Generating information file"
+    info_f=$base/data/$malware/info.txt
+    touch $info_f
+    echo "Clean phase: "$start_ts - $mid_ts >> $info_f
+    echo "Malicious phase: "$mid_ts - $end_ts >> $info_f
+    echo "Injected malware (hash): "$malware >> $info_f
+    echo "Infected server: "$server >> $info_f
+    echo "Traffic
+=======
+ON/OFF Pareto (default NS2 parameters)
+Number of concurrent clients: 80
+Requests rate/sec: 1 (3600/hr)" >> $info_f
+    #mv $malware_dir/$malware $malware_dir/done
+
+    echo "Cleaning and preparing for next experiment instance..."
+    clean
+done

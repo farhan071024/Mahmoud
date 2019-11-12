@@ -1,0 +1,57 @@
+heat_template_version: 2016-04-08
+description: Ubuntu 16.04_64 Webserver.
+
+parameters:
+  key_name:
+    type: string
+    description: Name of Webserver SSH Key.
+  subnet:
+    type: string
+    description: Name of Webserver Network.
+  member_pool_id:
+    type: string
+    description: Pool ID that the server will be attached to be member of a loadbalancer.
+  server_group:
+    type: string
+    description: Autoscalling server_group
+  image_name:
+    type: string
+  flavor_name:
+    type: string
+  security_group:
+    type: string
+  lb_ip:
+    type: string
+  network_name:
+    type: string
+  shared_fpath:
+    type: string
+
+resources:
+  server:
+    type: OS::Nova::Server
+    properties:
+      name: webserver
+      image: {get_param: image_name}
+      flavor: {get_param: flavor_name}
+      key_name: {get_param: key_name}
+      metadata: {"metering.server_group": {get_param: server_group}}
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: {get_file: config_scripts/webserver.sh}
+          params:
+            $lb_ip: {get_param: lb_ip}
+            $shared_fpath: {get_param: shared_fpath}
+      networks:
+        - subnet: {get_param: subnet}
+      security_groups: [{get_param: security_group},default]
+
+  lb_member:
+    type: OS::Neutron::LBaaS::PoolMember
+    properties:
+      address: {get_attr: [server, networks, {get_param: network_name}, 0]}
+      admin_state_up: True
+      pool: {get_param: member_pool_id}
+      protocol_port: 80
+      subnet: {get_param: subnet}

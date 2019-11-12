@@ -1,0 +1,135 @@
+heat_template_version: 2016-04-08
+description: Webservers AutoScaling.
+
+parameters:
+  image_name:
+    type: string
+    description: "Image used for the webserver."
+  flavor_name:
+    type: string
+    description: "Flavor used for the webserver."
+  security_group:
+    type: string
+    description: "Name of the webservers security groups."
+  subnet:
+    type: string
+    description: "Name of Webserver subnet."
+  key_name:
+    type: string
+    description: Name of Webserver SSH Key.
+  autoscale_min_size:
+    description: "Minimum number of webservers."
+    type: number
+    default: 1
+  autoscale_max_size:
+    description: "Maximum number of webservers."
+    type: number
+    default: 5
+  autoscale_start_capacity:
+    description: "Number of starting webservers"
+    type: number
+    default: 2
+  scaleup_threshold:
+    type: number
+    description: "Threshold when the webservers scale up."
+  scaledown_threshold:
+    type: number
+    description: "Threshold when the webservers scale down."
+  alarm_scaleup_check_period:
+    type: number
+    description: "Checking period of Webservers scaling up."
+  alarm_scaledown_check_period:
+    type: number
+    description: "Checking period of Webservers scaling down."
+  lb_member_pool_id:
+    type: string
+    description: "Pool ID that the server will be attached to be member of a loadbalancer."
+  appserver_lb_ip:
+    type: string
+    description: "Appserver Loadbalancer IP."
+  network_name:
+    type: string
+    description: "Webserver Network name"
+  scalability_cooldown:
+    type: number
+    description: "Scaling up/down cooldown period"
+  shared_fpath:
+    type: string
+    description: "Shared folder path for collecting agents"
+
+
+resources:
+  autoscale_group:
+    type: OS::Heat::AutoScalingGroup
+    properties:
+      min_size: {get_param: autoscale_min_size}
+      max_size: {get_param: autoscale_max_size}
+      cooldown: {get_param: scalability_cooldown}
+      desired_capacity: {get_param: autoscale_start_capacity}
+      resource:
+        type: OS::Nova::Server::Webserver
+        properties:
+          image_name: {get_param: image_name}
+          flavor_name: {get_param: flavor_name}
+          key_name: {get_param: key_name}
+          security_group: {get_param: security_group}
+          subnet: {get_param: subnet}
+          member_pool_id: {get_param: lb_member_pool_id}
+          server_group: {get_param: "OS::stack_id"}
+          lb_ip: {get_param: appserver_lb_ip}
+          network_name: {get_param: network_name}
+          shared_fpath: {get_param: shared_fpath}
+
+  scaleup_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: autoscale_group}
+      scaling_adjustment: 1
+
+  scaledown_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: autoscale_group}
+      scaling_adjustment: -1
+
+  cpu_alarm_low:
+    type: OS::Aodh::GnocchiAggregationByResourcesAlarm
+    properties:
+      metric: cpu_util
+      aggregation_method: mean
+      resource_type: instance
+      evaluation_periods: 2
+      granularity: {get_param: alarm_scaledown_check_period}
+      threshold: {get_param: scaledown_threshold}
+      comparison_operator: lt
+      query:
+        list_join:
+          - ''
+          - - {'=': {server_group: {get_param: "OS::stack_id"}}}
+      alarm_actions:
+        - str_replace:
+            template: trust+url
+            params:
+              url: {get_attr: [scaledown_policy, signal_url]}
+
+  cpu_alarm_high:
+    type: OS::Aodh::GnocchiAggregationByResourcesAlarm
+    properties:
+      metric: cpu_util
+      aggregation_method: mean
+      resource_type: instance
+      evaluation_periods: 2
+      granularity: {get_param: alarm_scaleup_check_period}
+      threshold: {get_param: scaleup_threshold}
+      comparison_operator: gt
+      query:
+        list_join:
+          - ''
+          - - {'=': {server_group: {get_param: "OS::stack_id"}}}
+      alarm_actions:
+        - str_replace:
+            template: trust+url
+            params:
+              url: {get_attr: [scaleup_policy, signal_url]}

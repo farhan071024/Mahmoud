@@ -1,0 +1,192 @@
+heat_template_version: 2016-04-08
+description: Web & App servers AutoScaling.
+
+parameters:
+  scalability_cooldown:
+    type: number
+    description: "Scaling up/down cooldown period"
+  shared_fpath:
+    type: string
+    description: "Shared folder path for collecting agents"
+
+  dbserver_name:
+    type: string
+  dbserver_image_name:
+    type: string
+  dbserver_flavor_name:
+    type: string
+  dbserver_key_name:
+    type: string
+  dbserver_security_group:
+    type: string
+  dbserver_subnet:
+    type: string
+  dbserver_network_name:
+    type: string
+
+  webserver_image_name:
+    type: string
+    description: "Image used for the webserver."
+  webserver_flavor_name:
+    type: string
+    description: "Flavor used for the webserver."
+  webserver_security_group:
+    type: string
+    description: "Name of the webservers security groups."
+  webserver_subnet:
+    type: string
+    description: "Name of Webserver subnet."
+  webserver_key_name:
+    type: string
+    description: Name of Webserver SSH Key.
+  webserver_autoscale_min_size:
+    description: "Minimum number of webservers."
+    type: number
+    default: 1
+  webserver_autoscale_max_size:
+    description: "Maximum number of webservers."
+    type: number
+    default: 5
+  webserver_autoscale_start_capacity:
+    description: "Number of starting webservers"
+    type: number
+    default: 2
+  webserver_scaleup_threshold:
+    type: number
+    description: "Threshold when the webservers scale up."
+  webserver_scaledown_threshold:
+    type: number
+    description: "Threshold when the webservers scale down."
+  webserver_alarm_scaleup_check_period:
+    type: number
+    description: "Checking period of Webservers scaling up."
+  webserver_alarm_scaledown_check_period:
+    type: number
+    description: "Checking period of Webservers scaling down."
+  webserver_lb_member_pool_id:
+    type: string
+    description: "Pool ID that the server will be attached to be member of a loadbalancer."
+  appserver_lb_ip:
+    type: string
+    description: "Appserver Loadbalancer IP."
+  webserver_network_name:
+    type: string
+    description: "Webserver Network name"
+
+  appserver_image_name:
+    type: string
+    description: "Image used for the appserver."
+  appserver_flavor_name:
+    type: string
+    description: "Flavor used for the appserver."
+  appserver_security_group:
+    type: string
+    description: "Name of the appservers security groups."
+  appserver_subnet:
+    type: string
+    description: "Name of Webserver subnet."
+  appserver_key_name:
+    type: string
+    description: Name of Webserver SSH Key.
+  appserver_autoscale_min_size:
+    description: "Minimum number of appservers."
+    type: number
+    default: 1
+  appserver_autoscale_max_size:
+    description: "Maximum number of appservers."
+    type: number
+    default: 5
+  appserver_autoscale_start_capacity:
+    description: "Number of starting appservers"
+    type: number
+    default: 2
+  appserver_scaleup_threshold:
+    type: number
+    description: "Threshold when the appservers scale up."
+  appserver_scaledown_threshold:
+    type: number
+    description: "Threshold when the appservers scale down."
+  appserver_alarm_scaleup_check_period:
+    type: number
+    description: "Checking period of appservers scaling up."
+  appserver_alarm_scaledown_check_period:
+    type: number
+    description: "Checking period of appservers scaling down."
+  appserver_lb_member_pool_id:
+    type: string
+    description: "Pool ID that the server will be attached to be member of a loadbalancer."
+  appserver_db_name:
+    type: string
+  appserver_db_user:
+    type: string
+  appserver_db_pass:
+    type: string
+  appserver_network_name:
+    type: string
+    description: "Appserver's Network name"
+
+resources:
+  dbserver:
+    type: OS::Nova::Server
+    properties:
+      name: {get_param: dbserver_name}
+      image: {get_param: dbserver_image_name}
+      flavor: {get_param: dbserver_flavor_name}
+      key_name: {get_param: dbserver_key_name}
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: {get_file: config_scripts/dbserver.sh}
+          params:
+            $shared_fpath: {get_param: shared_fpath}
+      networks:
+        - subnet: {get_param: dbserver_subnet}
+      security_groups: [{get_param: dbserver_security_group},default]
+
+
+
+  webserver_autoscale_group:
+    type: OS::Heat::AutoScalingGroup::Webserver
+    properties:
+      autoscale_min_size: {get_param: webserver_autoscale_min_size}
+      autoscale_max_size: {get_param: webserver_autoscale_max_size}
+      scalability_cooldown: {get_param: scalability_cooldown}
+      autoscale_start_capacity: {get_param: webserver_autoscale_start_capacity}
+      image_name: {get_param: webserver_image_name}
+      flavor_name: {get_param: webserver_flavor_name}
+      key_name: {get_param: webserver_key_name}
+      security_group: {get_param: webserver_security_group}
+      subnet: {get_param: webserver_subnet}
+      lb_member_pool_id: {get_param: webserver_lb_member_pool_id}
+      appserver_lb_ip: {get_param: appserver_lb_ip}
+      network_name: {get_param: webserver_network_name}
+      shared_fpath: {get_param: shared_fpath}
+      alarm_scaledown_check_period: {get_param: webserver_alarm_scaledown_check_period}
+      scaledown_threshold: {get_param: webserver_scaledown_threshold}
+      alarm_scaleup_check_period: {get_param: webserver_alarm_scaleup_check_period}
+      scaleup_threshold: {get_param: webserver_scaleup_threshold}
+
+  appserver_autoscale_group:
+    type: OS::Heat::AutoScalingGroup::Appserver
+    depends_on: dbserver
+    properties:
+      autoscale_min_size: {get_param: appserver_autoscale_min_size}
+      autoscale_max_size: {get_param: appserver_autoscale_max_size}
+      scalability_cooldown: {get_param: scalability_cooldown}
+      autoscale_start_capacity: {get_param: appserver_autoscale_start_capacity}
+      image_name: {get_param: appserver_image_name}
+      flavor_name: {get_param: appserver_flavor_name}
+      key_name: {get_param: appserver_key_name}
+      security_group: {get_param: appserver_security_group}
+      subnet: {get_param: appserver_subnet}
+      lb_member_pool_id: {get_param: appserver_lb_member_pool_id}
+      db_host: {get_attr: [dbserver, networks, {get_param: dbserver_network_name}, 0]}
+      db_name: {get_param: appserver_db_name}
+      db_user: {get_param: appserver_db_user}
+      db_pass: {get_param: appserver_db_pass}
+      network_name: {get_param: appserver_network_name}
+      shared_fpath: {get_param: shared_fpath}
+      alarm_scaledown_check_period: {get_param: appserver_alarm_scaledown_check_period}
+      scaledown_threshold: {get_param: appserver_scaledown_threshold}
+      alarm_scaleup_check_period: {get_param: appserver_alarm_scaleup_check_period}
+      scaleup_threshold: {get_param: appserver_scaleup_threshold}
